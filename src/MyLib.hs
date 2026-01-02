@@ -72,12 +72,11 @@ fullwidthCJKsymCJK :: Rule
 fullwidthCJKsymCJK = do
   lcjk <- cjkChar
   _ <- many (char ' ')
-  sym <- fmap T.unpack (chunk ".") <|> some (oneOf (":" :: [Char]))
+  sym <- try (some (char ':')) <|> count 1 (char '.')
   _ <- many (char ' ')
   rcjk <- cjkChar
-
-  let transformedsym = T.pack $ map convertToFullwidth sym
-  return $ T.pack [lcjk] <> transformedsym <> T.pack [rcjk]
+  let transformedsym =  map convertToFullwidth sym
+  return $ T.pack $ [lcjk] ++ transformedsym ++ [rcjk]
 
 fullwidthCJKsym :: Rule
 fullwidthCJKsym = do
@@ -101,17 +100,30 @@ fixCJKcolAN = do
   an <- alphaNumChar
   return $ T.pack $ [cjk] ++ "：" ++ [an]
 
+-- quotes
+-- seems confusing ...
+quotesym :: [Char]
+quotesym = "\x05f4\"\'`"
+
 cjkquote :: Rule
 cjkquote = do
   cjk <- cjkChar
-  quote <- oneOf ("\x05f4\"\'" :: [Char])
+  quote <- oneOf quotesym
   return $ T.pack $ [cjk] ++ " " ++ [quote]
 
 quoteCJK :: Rule
 quoteCJK = do
-  quote <- oneOf ("\x05f4\"\'" :: [Char])
+  quote <- oneOf quotesym
   cjk <- cjkChar
   return $ T.pack $ [quote] ++ " " ++ [cjk]
+
+fixQuote :: Rule
+fixQuote = do
+  openQuotes <- T.pack <$> some (oneOf quotesym)
+  _ <- many spaceChar
+  content <- T.pack <$> someTill anySingle (lookAhead $ some (oneOf quotesym))
+  closeQuotes <- T.pack  <$> some (oneOf quotesym)
+  return $ openQuotes <> T.strip content <> closeQuotes
 
 -- the rule set
 myRules :: RuleSet
@@ -121,5 +133,6 @@ myRules =
     dotsCJK,
     fixCJKcolAN,
     cjkquote,
-    quoteCJK
+    quoteCJK,
+    fixQuote
   ]
