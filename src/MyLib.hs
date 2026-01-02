@@ -2,6 +2,7 @@
 
 module MyLib where
 
+import Data.Function (fix)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void (Void)
@@ -16,20 +17,16 @@ type Rule = Parser Text
 
 type RuleSet = [Rule]
 
+applyUntilFixed :: Rule -> Text -> Text
+applyUntilFixed rule =
+  fix
+    ( \loop current ->
+        let next = streamEdit rule id current
+         in if next == current then next else loop next
+    )
+
 applyRules :: RuleSet -> Text -> Text
-applyRules [] input = input
-applyRules rules input = streamEdit (choice rules) id input
-
--- -- TEST RULES
--- appleToOrange :: Rule
--- appleToOrange = "orange" <$ chunk "apple"
-
--- emailAtRule :: Rule
--- emailAtRule = do
---   prefix <- some (alphaNumChar <|> oneOf ("._%+-" :: String))
---   _ <- char '@'
---   suffix <- some (alphaNumChar <|> oneOf (".-" :: String))
---   return $ T.pack prefix <> "[at]" <> T.pack suffix
+applyRules rules input = foldl (flip applyUntilFixed) input rules
 
 -------------------------------------------------------------------------------
 -- rules for pangu
@@ -61,24 +58,68 @@ convertToFullwidth c =
     '?' -> '？'
     ',' -> '，'
     ';' -> '；'
+    '\"' -> '”'
+    '\'' -> '’'
     _ -> c
 
 -- A parser that matches a single CJK character
 cjkChar :: Parser Char
 cjkChar = satisfy isCJK
 
-cjksymcjk :: Rule
-cjksymcjk = do
-  c1 <- cjkChar
-  mid <- do
-    _ <- many (char ' ')  -- leading spaces
-    core <- some $ oneOf (":.~!?,;" :: [Char])
-    _ <- many (char ' ')  -- trailing spaces
-    return $ T.pack core
-  c2 <- cjkChar
-  let transformedMid = T.pack $ map convertToFullwidth (T.unpack mid)
-  return $ T.singleton c1 <> transformedMid <> T.singleton c2
+-- use python.py as reference for these rules
+
+fullwidthCJKsymCJK :: Rule
+fullwidthCJKsymCJK = do
+  lcjk <- cjkChar
+  _ <- many (char ' ')
+  sym <- fmap T.unpack (chunk ".") <|> some (oneOf (":" :: [Char]))
+  _ <- many (char ' ')
+  rcjk <- cjkChar
+
+  let transformedsym = T.pack $ map convertToFullwidth sym
+  return $ T.pack [lcjk] <> transformedsym <> T.pack [rcjk]
+
+fullwidthCJKsym :: Rule
+fullwidthCJKsym = do
+  cjk <- cjkChar
+  _ <- many (char ' ')
+  sym <- some $ oneOf ("~!?,;" :: [Char])
+  _ <- many (char ' ')
+  let transformedsym = T.pack $ map convertToFullwidth sym
+  return $ T.pack [cjk] <> transformedsym
+
+dotsCJK :: Rule
+dotsCJK = do
+  dots <- chunk "..." <|> chunk "…"
+  cjk <- cjkChar
+  return $ dots <> T.pack (" " ++ [cjk])
+
+fixCJKcolAN :: Rule
+fixCJKcolAN = do
+  cjk <- cjkChar
+  _ <- chunk ":"
+  an <- alphaNumChar
+  return $ T.pack $ [cjk] ++ "：" ++ [an]
+
+cjkquote :: Rule
+cjkquote = do
+  cjk <- cjkChar
+  quote <- oneOf ("\x05f4\"\'" :: [Char])
+  return $ T.pack $ [cjk] ++ " " ++ [quote]
+
+quoteCJK :: Rule
+quoteCJK = do
+  quote <- oneOf ("\x05f4\"\'" :: [Char])
+  cjk <- cjkChar
+  return $ T.pack $ [quote] ++ " " ++ [cjk]
 
 -- the rule set
 myRules :: RuleSet
-myRules = [cjksymcjk]
+myRules =
+  [ fullwidthCJKsymCJK,
+    fullwidthCJKsym,
+    dotsCJK,
+    fixCJKcolAN,
+    cjkquote,
+    quoteCJK
+  ]
