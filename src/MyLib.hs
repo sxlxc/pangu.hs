@@ -20,16 +20,16 @@ applyRules :: RuleSet -> Text -> Text
 applyRules [] input = input
 applyRules rules input = streamEdit (choice rules) id input
 
--- TEST RULES
-appleToOrange :: Rule
-appleToOrange = "orange" <$ chunk "apple"
+-- -- TEST RULES
+-- appleToOrange :: Rule
+-- appleToOrange = "orange" <$ chunk "apple"
 
-emailAtRule :: Rule
-emailAtRule = do
-  prefix <- some (alphaNumChar <|> oneOf ("._%+-" :: String))
-  _ <- char '@'
-  suffix <- some (alphaNumChar <|> oneOf (".-" :: String))
-  return $ T.pack prefix <> "[at]" <> T.pack suffix
+-- emailAtRule :: Rule
+-- emailAtRule = do
+--   prefix <- some (alphaNumChar <|> oneOf ("._%+-" :: String))
+--   _ <- char '@'
+--   suffix <- some (alphaNumChar <|> oneOf (".-" :: String))
+--   return $ T.pack prefix <> "[at]" <> T.pack suffix
 
 -------------------------------------------------------------------------------
 -- rules for pangu
@@ -52,38 +52,33 @@ isCJK c = any (\(start, end) -> c >= start && c <= end) cjkRanges
       ]
 
 convertToFullwidth :: Char -> Char
-convertToFullwidth c = case c of
-  ':' -> '：'
-  '.' -> '。'
-  '~' -> '～'
-  '!' -> '！'
-  '?' -> '？'
-  ',' -> '，'
-  ';' -> '；'
-  _ -> c
+convertToFullwidth c =
+  case c of
+    ':' -> '：'
+    '.' -> '。'
+    '~' -> '～'
+    '!' -> '！'
+    '?' -> '？'
+    ',' -> '，'
+    ';' -> '；'
+    _ -> c
 
 -- A parser that matches a single CJK character
 cjkChar :: Parser Char
 cjkChar = satisfy isCJK
 
-fullWidthSymbolRule :: Rule
-fullWidthSymbolRule = do
-  c1 <- cjkChar -- First CJK
-  mid <-
-    some $
-      choice -- The "middle" symbol part
-        [ char ' ',
-          char ':',
-          char '.'
-        ]
-  c2 <- cjkChar -- Second CJK
-
-  -- In Haskell, we can actually process the 'mid' string logic here.
-  -- For now, let's assume we want to turn ":" into "：" and "." into "。"
-  let transformedMid = T.pack $ map convertToFullwidth mid
+cjksymcjk :: Rule
+cjksymcjk = do
+  c1 <- cjkChar
+  mid <- do
+    _ <- many (char ' ')  -- leading spaces
+    core <- some $ oneOf (":.~!?,;" :: [Char])
+    _ <- many (char ' ')  -- trailing spaces
+    return $ T.pack core
+  c2 <- cjkChar
+  let transformedMid = T.pack $ map convertToFullwidth (T.unpack mid)
   return $ T.singleton c1 <> transformedMid <> T.singleton c2
-
 
 -- the rule set
 myRules :: RuleSet
-myRules = [appleToOrange, emailAtRule, try fullWidthSymbolRule]
+myRules = [cjksymcjk]

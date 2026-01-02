@@ -6,14 +6,8 @@ import Test.Hspec
 
 main :: IO ()
 main = hspec $ do
-  describe "MyLib.mapemail" $ do
-    it "maps @ to [at] in emails" $ do
-      applyRules myRules "aaa@a.com" `shouldBe` "aaa[at]a.com"
-
-  describe "MyLib.mapfruits" $ do
-    it "maps apple to orange" $ do
-      applyRules myRules "apple" `shouldBe` "orange"
-
-  describe "MyLib.fullWidthSymbolRule" $ do
-    it "你:好" $ do
-      applyRules myRules "你:好" `shouldBe` "你：好"
+  describe "MyLib.cjksymcjk" $ do
+    it "converts symbols between CJK characters to fullwidth" $ do
+      applyRules myRules "你 : 好" `shouldBe` "你：好"
+      applyRules myRules "你.好" `shouldBe` "你。好"
+      applyRules myRules "你   ? 好" `shouldBe` "你？好"
