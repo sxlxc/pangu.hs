@@ -21,15 +21,28 @@ applyUntilFixed :: Rule -> Text -> Text
 applyUntilFixed rule =
   fix
     ( \loop current ->
-        let next = streamEdit rule id current
+        let next = streamEdit (try rule) id current
          in if next == current then next else loop next
     )
 
+applyRulesRecursively :: RuleSet -> Text -> Text
+applyRulesRecursively rules input = foldl (flip applyUntilFixed) input rules
+
 applyRules :: RuleSet -> Text -> Text
-applyRules rules input = foldl (flip applyUntilFixed) input rules
+applyRules rules input = foldl (flip applyOnce) input rules
+  where
+    applyOnce rule = streamEdit (try rule) id
 
 -------------------------------------------------------------------------------
 -- rules for pangu
+
+-- alphaNumChar from megaparsec matches CJK chars...
+-- need to implement a new one
+alphanumericChar :: Parser Char
+alphanumericChar = satisfy $ \c ->
+  (c >= 'a' && c <= 'z')
+    || (c >= 'A' && c <= 'Z')
+    || (c >= '0' && c <= '9')
 
 -- | Check if a character falls within the CJK ranges provided
 isCJK :: Char -> Bool
@@ -97,7 +110,7 @@ fixCJKcolAN :: Rule
 fixCJKcolAN = do
   cjk <- cjkChar
   _ <- char ':'
-  an <- alphaNumChar
+  an <- alphanumericChar
   return $ T.pack $ [cjk] ++ "：" ++ [an]
 
 -- quotes
@@ -143,24 +156,76 @@ singlequoteCJK = do
 
 fixPossessivequote :: Rule
 fixPossessivequote = do
-  pre <- cjkChar <|> alphaNumChar
+  pre <- cjkChar <|> alphanumericChar
   _ <- some spaceChar
   _ <- chunk "'s"
   return $ T.pack $ pre : "'s"
 
 -- hash
--- hashANSCJKhash :: Rule
--- hashANSCJKhash = do
---   cjk1 <- cjkChar
---   _ <- char '#'
+hashANSCJKhash :: Rule
+hashANSCJKhash = do
+  cjk1 <- cjkChar
+  _ <- char '#'
+  mid <- some cjkChar
+  _ <- char '#'
+  cjk2 <- cjkChar
+  return $ T.pack $ [cjk1] ++ " #" ++ mid ++ "# " ++ [cjk2]
 
+cjkhash :: Rule
+cjkhash = do
+  cjk <- cjkChar
+  _ <- char '#'
+  _ <- lookAhead $ anySingleBut ' '
+  return $ T.pack $ cjk : " #"
+
+hashcjk :: Rule
+hashcjk = do
+  _ <- char '#'
+  _ <- lookAhead $ anySingleBut ' '
+  cjk <- cjkChar
+  return $ T.pack $ "# " ++ [cjk]
+
+-- operators
+cjkOPTan :: Rule
+cjkOPTan = do
+  cjk <- cjkChar
+  opt <- oneOf ("+-=*/&|<>%" :: [Char])
+  an <- alphanumericChar
+  return $ T.pack [cjk, ' ', opt, ' ', an]
+
+anOPTcjk :: Rule
+anOPTcjk = do
+  an <- alphanumericChar
+  opt <- oneOf ("+-=*/&|<>%" :: [Char])
+  cjk <- cjkChar
+  return $ T.pack [an, ' ', opt, ' ', cjk]
+
+-- slash/bracket rules are not implemented
+
+-- CJK and alphanumeric without space
+
+cjkans :: Rule
+cjkans = do
+  cjk <- cjkChar
+  _ <- lookAhead (alphanumericChar <|> oneOf ("@$%^&*-+\\=|/" :: [Char]))
+  return $ T.pack [cjk, ' ']
+
+anscjk :: Rule
+anscjk = do
+  an <- alphanumericChar <|> oneOf ("~!$%^&*-+\\=|;:,./?" :: [Char])
+  _ <- lookAhead cjkChar
+  return $ T.pack [an, ' ']
 
 -- rule set, the order matters
-myRules :: RuleSet
-myRules =
+recursiveRules :: RuleSet
+recursiveRules =
   [ fullwidthCJKsymCJK,
-    fullwidthCJKsym,
-    dotsCJK,
+    fullwidthCJKsym
+  ]
+
+onepassRules :: RuleSet
+onepassRules =
+  [ dotsCJK,
     fixCJKcolAN,
     cjkquote,
     quoteCJK,
@@ -168,5 +233,13 @@ myRules =
     cjkpossessivequote,
     -- singlequoteCJK,
     fixPossessivequote,
+    hashANSCJKhash,
+    cjkhash,
+    -- hashcjk,
+    anscjk,
+    cjkans,
     empty -- a dummy rule
   ]
+
+pangu :: Text -> Text
+pangu input = applyRules onepassRules $ applyRulesRecursively recursiveRules input
