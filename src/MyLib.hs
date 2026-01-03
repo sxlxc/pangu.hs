@@ -75,7 +75,7 @@ fullwidthCJKsymCJK = do
   sym <- try (some (char ':')) <|> count 1 (char '.')
   _ <- many (char ' ')
   rcjk <- cjkChar
-  let transformedsym =  map convertToFullwidth sym
+  let transformedsym = map convertToFullwidth sym
   return $ T.pack $ [lcjk] ++ transformedsym ++ [rcjk]
 
 fullwidthCJKsym :: Rule
@@ -96,14 +96,14 @@ dotsCJK = do
 fixCJKcolAN :: Rule
 fixCJKcolAN = do
   cjk <- cjkChar
-  _ <- chunk ":"
+  _ <- char ':'
   an <- alphaNumChar
   return $ T.pack $ [cjk] ++ "：" ++ [an]
 
 -- quotes
 -- seems confusing ...
 quotesym :: [Char]
-quotesym = "\x05f4\"\'`"
+quotesym = "'`\x05f4\""
 
 cjkquote :: Rule
 cjkquote = do
@@ -122,10 +122,40 @@ fixQuote = do
   openQuotes <- T.pack <$> some (oneOf quotesym)
   _ <- many spaceChar
   content <- T.pack <$> someTill anySingle (lookAhead $ some (oneOf quotesym))
-  closeQuotes <- T.pack  <$> some (oneOf quotesym)
+  closeQuotes <- T.pack <$> some (oneOf quotesym)
   return $ openQuotes <> T.strip content <> closeQuotes
 
--- the rule set
+cjkpossessivequote :: Rule
+cjkpossessivequote = do
+  cjk <- cjkChar
+  _ <- char '\''
+  _ <- lookAhead $ anySingleBut 's'
+  return $ T.pack $ cjk : " '"
+
+-- This singlequoteCJK rule will turn '你好' into ' 你好'
+-- which seems not desirable...
+-- however, the behavior is aligned with python version
+singlequoteCJK :: Rule
+singlequoteCJK = do
+  _ <- char '\''
+  cjk <- cjkChar
+  return $ T.pack $ "' " ++ [cjk]
+
+fixPossessivequote :: Rule
+fixPossessivequote = do
+  pre <- cjkChar <|> alphaNumChar
+  _ <- some spaceChar
+  _ <- chunk "'s"
+  return $ T.pack $ pre : "'s"
+
+-- hash
+-- hashANSCJKhash :: Rule
+-- hashANSCJKhash = do
+--   cjk1 <- cjkChar
+--   _ <- char '#'
+
+
+-- rule set, the order matters
 myRules :: RuleSet
 myRules =
   [ fullwidthCJKsymCJK,
@@ -134,5 +164,9 @@ myRules =
     fixCJKcolAN,
     cjkquote,
     quoteCJK,
-    fixQuote
+    fixQuote,
+    cjkpossessivequote,
+    -- singlequoteCJK,
+    fixPossessivequote,
+    empty -- a dummy rule
   ]
