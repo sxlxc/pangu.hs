@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
-import MyLib
+import Pangu
 import Test.Hspec
 
 
 main :: IO ()
 main = hspec $ do
-  describe "MyLib.cjksym(cjk)" $ do
+  describe "Pangu.cjksym(cjk)" $ do
     it "converts symbols to fullwidth" $ do
       pangu "你 : 好" `shouldBe` "你：好"
       pangu "你.好" `shouldBe` "你。好"

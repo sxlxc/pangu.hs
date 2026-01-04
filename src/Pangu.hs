@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module MyLib where
+module Pangu (pangu, isCJK) where
 
 import Data.Function (fix)
 import Data.Text (Text)
@@ -218,10 +218,7 @@ anscjk = do
 
 -- rule set, the order matters
 recursiveRules :: RuleSet
-recursiveRules =
-  [ fullwidthCJKsymCJK,
-    fullwidthCJKsym
-  ]
+recursiveRules = [fullwidthCJKsymCJK, fullwidthCJKsym]
 
 onepassRules :: RuleSet
 onepassRules =
